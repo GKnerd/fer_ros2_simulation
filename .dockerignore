@@ -1,0 +1,8 @@
+# Ignore the docker folder
+.docker
+
+# Ignore Git and IDE metadata
+.git
+.gitignore
+.vscode/
+.idea/

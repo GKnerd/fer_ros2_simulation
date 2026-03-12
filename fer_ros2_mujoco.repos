@@ -1,0 +1,13 @@
+repositories:
+  franka_description:
+    type: git
+    url: git@github.com:GKnerd/franka_description.git
+    version: main
+  mujoco_ros2_control:
+    type: git
+    url: https://github.com/ros-controls/mujoco_ros2_control.git
+    version: 375a5db49d2c92fcfdd8f88c1376c4fb3eee3a70
+  mujoco_vendor:
+    type: git
+    url: https://github.com/pal-robotics/mujoco_vendor.git
+    version: 26187d69dd239adc45c121af780d57590d189686

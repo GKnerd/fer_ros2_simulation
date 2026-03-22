@@ -70,5 +70,6 @@ docker run \
     -v $PACKAGE_ROOT/ros2_ws:/home/${CONTAINER_USER}/ros2_ws \
     -v $PACKAGE_ROOT/env:/home/${CONTAINER_USER}/env \
     -v $PACKAGE_ROOT/data:/home/${CONTAINER_USER}/data \
+    --entrypoint /bin/bash \
     --rm \
     $PACKAGE_NAME/ros:jazzy

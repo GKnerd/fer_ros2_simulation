@@ -1,7 +1,11 @@
 repositories:
   franka_description:
     type: git
-    url: git@github.com:GKnerd/franka_description.git
+    url: https://github.com/frankarobotics/franka_description.git
+    version: 72baf5bf4e88eaec27f0eb61be1b20a001abf2ab
+  franka_mujoco_sim_bringup:
+    type: git
+    url: git@github.com:GKnerd/mujoco_sim_bringup.git
     version: main
   mujoco_ros2_control:
     type: git

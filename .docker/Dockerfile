@@ -35,6 +35,7 @@ RUN apt-get update && apt-get upgrade -y \
 ##                                 Create User                              ##
 ##############################################################################
 ARG USER=mujoco_sim_docker
+ARG PROJECT_WS=ros2_ws
 ARG UID=1000
 ARG GID=$UID
 ARG ROS_DOMAIN_ID=0
@@ -48,15 +49,21 @@ RUN groupadd --gid $GID ${USER} \
     && echo "${USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER} \
     && chmod 0440 /etc/sudoers.d/${USER}
 
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /etc/bash.bashrc
+RUN echo "source /home/$USER/$PROJECT_WS/install/setup.bash" >> /etc/bash.bashrc
+RUN echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /etc/bash.bashrc
+RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /etc/bash.bashrc
+
+
 # Add DDS profile 
 COPY env/dds_profile.xml /home/${USER}
 RUN chown ${USER}:${USER} /home/${USER}/dds_profile.xml
 ENV FASTRTPS_DEFAULT_PROFILES_FILE=/home/${USER}/dds_profile.xml
-RUN echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /etc/bash.bashrc
+
 
 # Create base directories
 USER ${USER}
-RUN mkdir -p /home/${USER}/ros2_ws/src
+RUN mkdir -p /home/${USER}/${PROJECT_WS}/src
 
 ##############################################################################
 ##                                 Dependencies                             ##
@@ -78,10 +85,10 @@ USER ${USER}
 ##############################################################################
 ##                                 Build ROS                                ##
 ##############################################################################
-WORKDIR /home/${USER}/ros2_ws
-COPY --chown=$USER:$USER ros2_ws/src /home/$USER/ros2_ws/src
+WORKDIR /home/${USER}/${PROJECT_WS}
+COPY --chown=$USER:$USER ${PROJECT_WS}/src /home/$USER/${PROJECT_WS}/src
 
-WORKDIR /home/$USER/ros2_ws
+WORKDIR /home/$USER/${PROJECT_WS}
 
 RUN sudo apt-get update && \
     rosdep update && \
@@ -93,7 +100,7 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     --cmake-clean-cache --merge-install
 
 RUN sudo sed --in-place --expression \
-    '$isource "/home/$USER/ros2_ws/install/setup.bash"' \
+    '$isource "/home/$USER/${PROJECT_WS}/install/setup.bash"' \
     /ros_entrypoint.sh
 
 

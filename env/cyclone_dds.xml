@@ -10,8 +10,7 @@ https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclo
             <FragmentSize>4000B</FragmentSize>
         </General>
         <SharedMemory>
-            <Enable>true</Enable>
-            <LogLevel>info</LogLevel>
+            <Enable>false</Enable>
         </SharedMemory>
     </Domain>
 </CycloneDDS>

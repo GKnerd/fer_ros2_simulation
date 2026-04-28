@@ -61,10 +61,6 @@ RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> 
 COPY env/cyclone_dds.xml /home/${USER}
 RUN chown ${USER}:${USER} /home/${USER}/cyclone_dds.xml
 
-COPY env/cyclone_dds_udp.xml /home/${USER}
-RUN chown ${USER}:${USER} /home/${USER}/cyclone_dds_udp.xml
-# ENV FASTRTPS_DEFAULT_PROFILES_FILE=/home/${USER}/dds_profile.xml
-
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 ENV CYCLONEDDS_URI=file:///home/${USER}/cyclone_dds.xml
 

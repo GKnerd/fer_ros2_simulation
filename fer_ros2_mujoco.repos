@@ -15,3 +15,8 @@ repositories:
     type: git
     url: https://github.com/pal-robotics/mujoco_vendor.git
     version: 26187d69dd239adc45c121af780d57590d189686
+  panda_moveit_config:
+    type: git
+    url: https://github.com/GKnerd/panda_moveit_config.git
+    version: a86da56ab1c756a851d8ee2a06dd04266d1653d6
+    

@@ -72,4 +72,4 @@ docker run \
     -v $PACKAGE_ROOT/data:/home/${CONTAINER_USER}/data \
     --entrypoint /bin/bash \
     --rm \
-    $PACKAGE_NAME/fer_mujoco_sim:moveit_default
+    $PACKAGE_NAME/ros:jazzy_moveit

@@ -39,6 +39,15 @@ This builds the image, compiles the full ROS 2 workspace inside the container, a
 
 ## Running the Simulation
 
+0. Prelaunch setup:
+**Crucial**
+CycloneDDS requires a massive receive buffer to reliably handle large trajectory messages without dropping packets. You must configure your Host OS kernel to allow this, or the Docker container will crash on boot.
+```bash
+sudo sysctl -w net.core.rmem_max=2147483647
+```
+>Note 1: To make this persist across reboots, add `net.core.rmem_max=2147483647` to your `/etc/sysctl.conf file`.
+>Note 2: You don´t have to specify 2GBs as here, this is use case specific. The value was chosen arbitratily in this case. 
+
 1. Launch the container:
 ```bash
 ./.docker/run_container.sh

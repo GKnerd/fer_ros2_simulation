@@ -58,7 +58,7 @@ docker build \
     --build-arg GID="$gid" \
     --build-arg USER="$CONTAINER_USER" \
     --network=host \
-    -t $PACKAGE_NAME/ros:jazzy . -f $PACKAGE_ROOT/.docker/Dockerfile \
-    && docker create --name temp-container $PACKAGE_NAME/ros:jazzy \
+    -t $PACKAGE_NAME/ros:jazzy_moveit . -f $PACKAGE_ROOT/.docker/Dockerfile \
+    && docker create --name temp-container $PACKAGE_NAME/ros:jazzy_moveit \
     && docker cp temp-container:/home/${CONTAINER_USER}/ros2_ws/. $PACKAGE_ROOT/ros2_ws/. \
     && docker rm temp-container

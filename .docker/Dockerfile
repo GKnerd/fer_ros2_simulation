@@ -81,6 +81,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive && \
     ros-${ROS_DISTRO}-ros2-control \
     ros-${ROS_DISTRO}-rviz2 \
     ros-$ROS_DISTRO-rqt* \
+    ros-${ROS_DISTRO}-moveit-task-constructor-core \
+    ros-${ROS_DISTRO}-moveit-task-constructor-msgs \
+    ros-${ROS_DISTRO}-moveit-task-constructor-capabilities \
+    ros-${ROS_DISTRO}-moveit-task-constructor-visualization \
     && rm -rf /var/lib/apt/lists/*
 
 USER ${USER}

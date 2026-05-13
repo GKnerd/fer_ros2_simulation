@@ -58,6 +58,15 @@ for FOLDER in ros2_ws/src env log data; do
     fi
 done
 
+# Create the .claude_container, so sessions with claude inside docker persist
+for FOLDER in .claude_container; do 
+    HOST_PATH="$PACKAGE_ROOT/$FOLDER"
+    if [ ! -d "$HOST_PATH" ]; then
+        echo -e "${YELLOW_BOLD}Warning: $HOST_PATH does not exist. Creating it...${RESET}"
+        mkdir -p "$HOST_PATH"
+    fi
+done
+
 docker run \
     --name $PACKAGE_NAME \
     -it \
@@ -70,6 +79,7 @@ docker run \
     -v $PACKAGE_ROOT/ros2_ws:/home/${CONTAINER_USER}/ros2_ws \
     -v $PACKAGE_ROOT/env:/home/${CONTAINER_USER}/env \
     -v $PACKAGE_ROOT/data:/home/${CONTAINER_USER}/data \
+    -v $PACKAGE_ROOT/.claude_container:/home/${CONTAINER_USER}/.claude \
     --entrypoint /bin/bash \
     --rm \
-    $PACKAGE_NAME/ros:jazzy_moveit
+    $PACKAGE_NAME/ros:jazzy_moveit 

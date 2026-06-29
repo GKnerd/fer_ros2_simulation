@@ -15,13 +15,16 @@
 
 #include <kdl/chain.hpp>
 #include <kdl/chaindynparam.hpp>
+#include <kdl/chainfksolverpos_recursive.hpp>
+#include <kdl/chainjnttojacsolver.hpp>
+#include <kdl/jacobian.hpp>
 #include <kdl/jntarray.hpp>
 #include <kdl/jntspaceinertiamatrix.hpp>
 #include <kdl/tree.hpp>
 #include <kdl_parser/kdl_parser.hpp>
 
-// C interface to the CasADi QP solver (compiled with old ABI in casadi_qp_wrapper.so)
-#include "fer_fl_controller/casadi_qp_wrapper.h"
+// C interface to the obstacle-avoidance CasADi QP solver.
+#include "fer_fl_controller/casadi_qp_wrapper_obstacle.h"
 
 #include "fer_fl_controller/trajectory_generator.hpp"
 #include "fer_fl_controller/waypoint_sets.hpp"
@@ -31,18 +34,27 @@
 #define CASADI_INSTALL_DIR ""
 #endif
 
-class MPCCoupledQPNode : public rclcpp::Node
+class MPCCoupledQPObstacleNode : public rclcpp::Node
 {
 public:
-  MPCCoupledQPNode() : Node("mpc_coupled_qp_node")
+  // ── Obstacle sphere parameters (must match base_world.xml) ─────────────────
+  static constexpr double OBS_X = 0.05;
+  static constexpr double OBS_Y = 0.20;
+  static constexpr double OBS_Z = 0.75;
+  static constexpr double OBS_R = 0.08;
+
+  // ── Link bounding-sphere radii ──────────────────────────────────────────────
+  static constexpr double R_LINK_ELBOW = 0.06;
+  static constexpr double R_LINK_WRIST = 0.05;
+  static constexpr double R_LINK_EE    = 0.04;
+
+  MPCCoupledQPObstacleNode() : Node("mpc_coupled_qp_obstacle_node")
   {
     joint_names_ = {
       "fer_joint1", "fer_joint2", "fer_joint3", "fer_joint4",
       "fer_joint5", "fer_joint6", "fer_joint7"
     };
-    waypoints_ = WAYPOINT_SET_1;  // change to SET_2 / SET_3 / SET_4 to switch sets
-
-
+    waypoints_ = WAYPOINT_SET_2;  // change to SET_1 / SET_3 / SET_4 to switch sets
 
     current_waypoint_ = 0;
     q_des_ = waypoints_[current_waypoint_];
@@ -61,12 +73,12 @@ public:
 
     joint_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
       "/joint_states", 10,
-      std::bind(&MPCCoupledQPNode::jointCallback, this, std::placeholders::_1));
+      std::bind(&MPCCoupledQPObstacleNode::jointCallback, this, std::placeholders::_1));
 
     auto qos = rclcpp::QoS(1).transient_local().reliable();
     robot_description_sub_ = this->create_subscription<std_msgs::msg::String>(
       "/robot_description", qos,
-      std::bind(&MPCCoupledQPNode::robotDescriptionCallback, this, std::placeholders::_1));
+      std::bind(&MPCCoupledQPObstacleNode::robotDescriptionCallback, this, std::placeholders::_1));
 
     this->declare_parameter<double>("trajectory_duration", 5.0);
     traj_duration_ = this->get_parameter("trajectory_duration").as_double();
@@ -82,16 +94,16 @@ public:
     }
 
     // Build the CasADi QP solver once through the ABI-isolated C wrapper.
-    qp_handle_ = casadi_qp_coupled_create(CASADI_INSTALL_DIR);
+    qp_handle_ = casadi_qp_obstacle_create(CASADI_INSTALL_DIR);
     if (!qp_handle_) {
       RCLCPP_FATAL(this->get_logger(),
-        "Failed to build CasADi QP solver. Check that casadi_qp_wrapper.so can load "
+        "Failed to build CasADi QP solver. Check that casadi_qp_wrapper_obstacle.so can load "
         "libcasadi.so and its OSQP plugin from '%s'.", CASADI_INSTALL_DIR);
-      throw std::runtime_error("casadi_qp_coupled_create failed");
+      throw std::runtime_error("casadi_qp_obstacle_create failed");
     }
-    RCLCPP_INFO(this->get_logger(), "CasADi coupled QP solver ready (N=15, dt=0.01 s).");
+    RCLCPP_INFO(this->get_logger(), "CasADi obstacle QP solver ready (N=15, dt=0.01 s).");
 
-    log_file_.open("mpc_coupled_qp_log.csv");
+    log_file_.open("mpc_coupled_qp_obstacle_log.csv");
     log_file_ << std::setprecision(17);
 
     log_file_ << "time";
@@ -109,16 +121,18 @@ public:
     for (int i = 0; i < 7; ++i) log_file_ << ",best_cost" << i + 1;
     for (int i = 0; i < 7; ++i) log_file_ << ",qref" << i + 1;
     for (int i = 0; i < 7; ++i) log_file_ << ",dqref" << i + 1;
-    log_file_ << ",current_waypoint,solve_time_ms\n";
+    log_file_ << ",current_waypoint,solve_time_ms";
+    log_file_ << ",ee_x,ee_y,ee_z,wrist_x,wrist_y,wrist_z,elbow_x,elbow_y,elbow_z";
+    log_file_ << ",dist_ee,dist_wrist,dist_elbow,min_dist\n";
 
     RCLCPP_INFO(this->get_logger(),
-      "MPC coupled QP node started (mpc_mode: %s, trajectory_duration: %.1f s).",
+      "MPC obstacle QP node started (mpc_mode: %s, trajectory_duration: %.1f s).",
       mpc_mode_.c_str(), traj_duration_);
   }
 
-  ~MPCCoupledQPNode()
+  ~MPCCoupledQPObstacleNode()
   {
-    casadi_qp_coupled_destroy(qp_handle_);
+    casadi_qp_obstacle_destroy(qp_handle_);
     qp_handle_ = nullptr;
     if (log_file_.is_open()) {
       log_file_.close();
@@ -231,6 +245,7 @@ private:
       return;
     }
 
+    // ── Full chain for dynamics ────────────────────────────────────────────────
     if (!tree.getChain("base", "fer_hand_tcp", chain_)) {
       RCLCPP_ERROR(this->get_logger(), "Failed to extract KDL chain from base to fer_hand_tcp");
       return;
@@ -253,8 +268,39 @@ private:
     gravity_kdl_.resize(7);
     mass_kdl_.resize(7);
 
+    // ── Control-point chains (elbow and wrist) ────────────────────────────────
+    if (!tree.getChain("base", "fer_link4", chain_elbow_)) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to extract KDL chain base->fer_link4");
+      return;
+    }
+    if (!tree.getChain("base", "fer_link6", chain_wrist_)) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to extract KDL chain base->fer_link6");
+      return;
+    }
+
+    fk_elbow_  = std::make_unique<KDL::ChainFkSolverPos_recursive>(chain_elbow_);
+    fk_wrist_  = std::make_unique<KDL::ChainFkSolverPos_recursive>(chain_wrist_);
+    fk_ee_     = std::make_unique<KDL::ChainFkSolverPos_recursive>(chain_);
+
+    jac_elbow_ = std::make_unique<KDL::ChainJntToJacSolver>(chain_elbow_);
+    jac_wrist_ = std::make_unique<KDL::ChainJntToJacSolver>(chain_wrist_);
+    jac_ee_    = std::make_unique<KDL::ChainJntToJacSolver>(chain_);
+
+    const unsigned int n_elbow = chain_elbow_.getNrOfJoints();
+    const unsigned int n_wrist = chain_wrist_.getNrOfJoints();
+
+    q_elbow_kdl_.resize(n_elbow);
+    q_wrist_kdl_.resize(n_wrist);
+    q_ee_kdl_.resize(7);
+
+    jacobian_elbow_.resize(n_elbow);
+    jacobian_wrist_.resize(n_wrist);
+    jacobian_ee_.resize(7);
+
     model_ready_ = true;
-    RCLCPP_INFO(this->get_logger(), "KDL model initialized successfully.");
+    RCLCPP_INFO(this->get_logger(),
+      "KDL model initialized (elbow chain: %u joints, wrist chain: %u joints).",
+      n_elbow, n_wrist);
   }
 
   // ── Joint state callback ───────────────────────────────────────────────────
@@ -320,6 +366,51 @@ private:
       return;
     }
 
+    // ── Control-point FK, Jacobians, and clearance distances ──────────────────
+    const unsigned int n_elbow = chain_elbow_.getNrOfJoints();
+    const unsigned int n_wrist = chain_wrist_.getNrOfJoints();
+
+    for (unsigned int i = 0; i < n_elbow; ++i) q_elbow_kdl_(i) = q[i];
+    for (unsigned int i = 0; i < n_wrist; ++i) q_wrist_kdl_(i) = q[i];
+    for (unsigned int i = 0; i < 7;       ++i) q_ee_kdl_(i)    = q[i];
+
+    fk_elbow_->JntToCart(q_elbow_kdl_, elbow_frame_);
+    fk_wrist_->JntToCart(q_wrist_kdl_, wrist_frame_);
+    fk_ee_->JntToCart(q_ee_kdl_,       ee_frame_);
+
+    jac_elbow_->JntToJac(q_elbow_kdl_, jacobian_elbow_);
+    jac_wrist_->JntToJac(q_wrist_kdl_, jacobian_wrist_);
+    jac_ee_->JntToJac(q_ee_kdl_,       jacobian_ee_);
+
+    auto signed_clearance = [](const KDL::Frame & f,
+                                double ox, double oy, double oz,
+                                double obs_r, double link_r) {
+      const double dx = f.p.x() - ox;
+      const double dy = f.p.y() - oy;
+      const double dz = f.p.z() - oz;
+      return std::sqrt(dx*dx + dy*dy + dz*dz) - obs_r - link_r;
+    };
+
+    dist_elbow_ = signed_clearance(elbow_frame_, OBS_X, OBS_Y, OBS_Z, OBS_R, R_LINK_ELBOW);
+    dist_wrist_ = signed_clearance(wrist_frame_, OBS_X, OBS_Y, OBS_Z, OBS_R, R_LINK_WRIST);
+    dist_ee_    = signed_clearance(ee_frame_,    OBS_X, OBS_Y, OBS_Z, OBS_R, R_LINK_EE);
+
+    const double min_dist = std::min({dist_elbow_, dist_wrist_, dist_ee_});
+
+    if (min_dist < 0.0) {
+      const double t_warn = this->now().seconds();
+      if (t_warn - last_warn_time_ >= 0.1) {
+        const char * closest =
+          (dist_elbow_ <= dist_wrist_ && dist_elbow_ <= dist_ee_) ? "elbow" :
+          (dist_wrist_ <= dist_ee_)                                ? "wrist" : "ee";
+        RCLCPP_WARN(this->get_logger(),
+          "OBSTACLE COLLISION: min_dist=%.4f m (closest link: %s)",
+          min_dist, closest);
+        last_warn_time_ = t_warn;
+      }
+    }
+    // ── End control-point computation ──────────────────────────────────────────
+
     double t_now = this->now().seconds();
     const double dt_loop = (prev_time_ < 0.0) ? 0.0 : (t_now - prev_time_);
     prev_time_ = t_now;
@@ -341,17 +432,12 @@ private:
         "Switching to waypoint %zu", current_waypoint_);
     }
 
-  
     for (size_t i = 0; i < 7; ++i) {
       error[i] = ref.q[i] - q[i];
       error_integral_[i] += error[i] * dt_loop;
       error_integral_[i]  = std::clamp(error_integral_[i], -1.0, 1.0);
     }
 
-    // Compute friction once — needed by both the QP (as a parameter) and the
-    // feedback-linearisation torque conversion below.
-    // 80% feedforward: leaves residual viscous damping (zeta~2) to prevent
-    // oscillation; the integral term covers the remaining 20% within ~2-3 s.
     tau_friction = computeFrictionFeedforward(ref.dq);
 
     if (mpc_mode_ == "qp_coupled") {
@@ -378,9 +464,6 @@ private:
         p_vec[98 + i] = tau_friction[i];
       }
 
-      // Shift QP bounds by the integral contribution so the QP plans within the
-      // remaining torque budget: -lim ≤ M·v+C+fric+ki·∫e ≤ lim
-      // rearranges to: (-lim - ki·∫e) ≤ M·v+C+fric ≤ (lim - ki·∫e)
       double tau_min[7], tau_max[7];
       for (int i = 0; i < 7; ++i) {
         const double tau_int = ki_[i] * error_integral_[i];
@@ -389,7 +472,7 @@ private:
       }
 
       double v_out[7]    = {};
-      int rc = casadi_qp_coupled_solve(
+      int rc = casadi_qp_obstacle_solve(
         qp_handle_,
         p_vec, tau_min, tau_max, v_prev_.data(),
         v_out, &solve_time_ms, &qp_cost_value);
@@ -435,7 +518,7 @@ private:
       }
     }
 
-    // ── Feedback-linearisation torque conversion (identical to original) ──────
+    // ── Feedback-linearisation torque conversion ──────────────────────────────
     for (size_t i = 0; i < 7; ++i) {
       double mv = 0.0;
       for (size_t j = 0; j < 7; ++j) {
@@ -474,14 +557,21 @@ private:
       for (double val : best_cost)    log_file_ << "," << val;
       for (double val : ref.q)        log_file_ << "," << val;
       for (double val : ref.dq)       log_file_ << "," << val;
-      log_file_ << "," << current_waypoint_ << "," << solve_time_ms << "\n";
+      log_file_ << "," << current_waypoint_ << "," << solve_time_ms;
+      log_file_ << "," << ee_frame_.p.x()    << "," << ee_frame_.p.y()    << "," << ee_frame_.p.z();
+      log_file_ << "," << wrist_frame_.p.x() << "," << wrist_frame_.p.y() << "," << wrist_frame_.p.z();
+      log_file_ << "," << elbow_frame_.p.x() << "," << elbow_frame_.p.y() << "," << elbow_frame_.p.z();
+      log_file_ << "," << dist_ee_ << "," << dist_wrist_ << "," << dist_elbow_;
+      log_file_ << "," << min_dist << "\n";
     }
 
     RCLCPP_INFO_THROTTLE(
       this->get_logger(), *this->get_clock(), 2000,
-      "MPC QP: raw=[%.2f %.2f %.2f], sat=[%.2f %.2f %.2f], solve=%.3f ms",
+      "MPC obstacle QP: raw=[%.2f %.2f %.2f], sat=[%.2f %.2f %.2f], solve=%.3f ms | "
+      "dist: ee=%.3f wrist=%.3f elbow=%.3f min=%.3f",
       tau_raw[0], tau_raw[1], tau_raw[2],
-      tau_sat[0], tau_sat[1], tau_sat[2], solve_time_ms);
+      tau_sat[0], tau_sat[1], tau_sat[2], solve_time_ms,
+      dist_ee_, dist_wrist_, dist_elbow_, min_dist);
   }
 
   // ── Member variables ───────────────────────────────────────────────────────
@@ -500,8 +590,6 @@ private:
 
   std::vector<double> v_prev_ = std::vector<double>(7, 0.0);
   std::vector<double> error_integral_ = std::vector<double>(7, 0.0);
-  // Option C: small integral gain with QP-aware bounds shifting. Overcomes gravity model
-  // mismatch and static friction residuals without MPC–integral fighting.
   std::vector<double> ki_{2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0};
 
   std::vector<std::vector<double>> waypoints_;
@@ -514,6 +602,7 @@ private:
   std::vector<double>      tau_limits_;
   std::vector<double>      armature_;
 
+  // ── Dynamics chain (base → fer_hand_tcp) ──────────────────────────────────
   KDL::Chain                            chain_;
   std::unique_ptr<KDL::ChainDynParam>   dyn_solver_;
   KDL::JntArray                         q_kdl_;
@@ -521,6 +610,37 @@ private:
   KDL::JntArray                         coriolis_kdl_;
   KDL::JntArray                         gravity_kdl_;
   KDL::JntSpaceInertiaMatrix            mass_kdl_;
+
+  // ── Control-point chains (base → fer_link4 / fer_link6) ───────────────────
+  KDL::Chain chain_elbow_;
+  KDL::Chain chain_wrist_;
+
+  std::unique_ptr<KDL::ChainFkSolverPos_recursive> fk_elbow_;
+  std::unique_ptr<KDL::ChainFkSolverPos_recursive> fk_wrist_;
+  std::unique_ptr<KDL::ChainFkSolverPos_recursive> fk_ee_;
+
+  std::unique_ptr<KDL::ChainJntToJacSolver> jac_elbow_;
+  std::unique_ptr<KDL::ChainJntToJacSolver> jac_wrist_;
+  std::unique_ptr<KDL::ChainJntToJacSolver> jac_ee_;
+
+  KDL::JntArray q_elbow_kdl_;
+  KDL::JntArray q_wrist_kdl_;
+  KDL::JntArray q_ee_kdl_;
+
+  KDL::Jacobian jacobian_elbow_;
+  KDL::Jacobian jacobian_wrist_;
+  KDL::Jacobian jacobian_ee_;
+
+  // ── Control-point poses and clearances (updated every cycle) ──────────────
+  KDL::Frame elbow_frame_;
+  KDL::Frame wrist_frame_;
+  KDL::Frame ee_frame_;
+
+  double dist_elbow_{1.0};
+  double dist_wrist_{1.0};
+  double dist_ee_{1.0};
+
+  double last_warn_time_{-1.0};
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr  joint_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr         robot_description_sub_;
@@ -532,7 +652,7 @@ private:
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<MPCCoupledQPNode>());
+  rclcpp::spin(std::make_shared<MPCCoupledQPObstacleNode>());
   rclcpp::shutdown();
   return 0;
 }

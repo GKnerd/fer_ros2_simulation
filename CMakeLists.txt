@@ -143,4 +143,72 @@ install(TARGETS casadi_qp_wrapper
     WORLD_READ WORLD_EXECUTE
 )
 
+# ── Obstacle-avoidance QP wrapper shared library ──────────────────────────────
+add_library(casadi_qp_wrapper_obstacle SHARED
+  src/casadi_qp_wrapper_obstacle.cpp
+)
+
+target_compile_definitions(casadi_qp_wrapper_obstacle PRIVATE
+  "CASADI_INSTALL_DIR=\"${CASADI_LIBRARY_DIR}\""
+)
+
+target_compile_definitions(casadi_qp_wrapper_obstacle PRIVATE _GLIBCXX_USE_CXX11_ABI=0)
+
+target_link_libraries(casadi_qp_wrapper_obstacle PRIVATE
+  casadi::casadi
+)
+
+target_include_directories(casadi_qp_wrapper_obstacle PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+
+set_target_properties(casadi_qp_wrapper_obstacle PROPERTIES
+  BUILD_RPATH            "${CASADI_LIBRARY_DIR}"
+  INSTALL_RPATH          "${CASADI_LIBRARY_DIR}"
+  INSTALL_RPATH_USE_LINK_PATH TRUE
+)
+
+# ── Obstacle-avoidance coupled-QP node ────────────────────────────────────────
+add_executable(mpc_coupled_qp_obstacle_node src/mpc_coupled_qp_obstacle_node.cpp)
+
+ament_target_dependencies(mpc_coupled_qp_obstacle_node
+  rclcpp
+  sensor_msgs
+  std_msgs
+  kdl_parser
+  orocos_kdl_vendor
+)
+
+target_link_libraries(mpc_coupled_qp_obstacle_node
+  orocos-kdl
+  casadi_qp_wrapper_obstacle
+)
+
+target_include_directories(mpc_coupled_qp_obstacle_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+
+target_compile_definitions(mpc_coupled_qp_obstacle_node PRIVATE
+  "CASADI_INSTALL_DIR=\"${CASADI_LIBRARY_DIR}\""
+)
+
+set_target_properties(mpc_coupled_qp_obstacle_node PROPERTIES
+  BUILD_RPATH            "${CMAKE_CURRENT_BINARY_DIR}:${CASADI_LIBRARY_DIR}"
+  INSTALL_RPATH          "$ORIGIN:${CASADI_LIBRARY_DIR}"
+  INSTALL_RPATH_USE_LINK_PATH TRUE
+)
+
+install(TARGETS
+  mpc_coupled_qp_obstacle_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(TARGETS casadi_qp_wrapper_obstacle
+  LIBRARY DESTINATION lib/${PROJECT_NAME}
+  PERMISSIONS
+    OWNER_READ OWNER_WRITE OWNER_EXECUTE
+    GROUP_READ GROUP_EXECUTE
+    WORLD_READ WORLD_EXECUTE
+)
+
 ament_package()

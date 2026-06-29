@@ -21,6 +21,7 @@
 #include <kdl_parser/kdl_parser.hpp>
 
 #include "fer_fl_controller/trajectory_generator.hpp"
+#include "fer_fl_controller/waypoint_sets.hpp"
 
 class MPCControllerNode : public rclcpp::Node
 {
@@ -32,16 +33,7 @@ public:
       "fer_joint5", "fer_joint6", "fer_joint7"
     };
 
-    // Same 6 configs used by fk_ik_waypoint_tester and waypoint_sequencer.py.
-    // Running the FK tester first confirms every config is reachable by MoveIt.
-  waypoints_ = {
-  { 0.0,  -1.5,    0.0, -0.8,    0.0,  2.5,    0.5   },  // A
-  { 0.3,  -1.4,    0.2, -1.0,    0.3,  2.3,    0.8   },  // B
-  {-0.3,  -1.4,   -0.2, -1.0,   -0.3,  2.3,    0.8   },  // C
-  { 0.0,  -1.6,    0.0, -1.3,    0.0,  2.0,    1.2   },  // D
-  { 0.0,  -1.3,    0.0, -1.5,    0.0,  2.8,    0.6   },  // E
-  { 0.0,  -0.7854, 0.0, -2.3562, 0.0,  1.5708, 0.7854},  // home
-};
+    waypoints_ = WAYPOINT_SET_1;  // change to SET_2 / SET_3 / SET_4 to switch sets
 
 
     current_waypoint_ = 0;
@@ -448,7 +440,7 @@ private:
   std::vector<double> ki_{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
   std::vector<std::vector<double>> waypoints_;
-  size_t current_waypoint_{1};
+  size_t current_waypoint_{0};
 
   std::vector<std::string> joint_names_;
   std::vector<double>      q_des_;

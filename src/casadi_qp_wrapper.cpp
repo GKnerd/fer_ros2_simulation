@@ -34,31 +34,30 @@ cs::MX v = cs::MX::sym("v", 7);// each v is the virtual acceleration for one joi
   cs::MX tau_fric = p(cs::Slice(98, 105));// 7
 
   // Rebuild M from column-major flat vector to 7×7
-  cs::MX M = cs::MX::reshape(M_flat, 7, 7);// The mass matrix M is provided as a flat vector of 49 elements in column-major order, so we reshape it into a 7×7 matrix for use in the solver. 
+  cs::MX M = cs::MX::reshape(M_flat, 7, 7);// The mass matrix M is provided as a flat vector of 49 elements in column-major order, so we reshape it into a 7×7 matrix for use in the solver.
 
   // Cost weights — identical to brute_decoupled for fair benchmark comparison
   const double dt    = 0.01;
   const int    N     = 15;// MPC horizon length (number of prediction steps)
   const double q_w   = 100.0;// Position weight
   const double dq_w  = 1.0;// Velocity weight
-  const double u_w   = 0.01;// Control rate weight (acceleration-change penalty)
+  // Per-joint control-rate weight: wrist joints heavily penalised to suppress sign-flipping
+  const cs::MX u_w = cs::MX::vertcat({0.1, 0.1, 0.1, 0.1, 0.5, 1.0, 1.5});
   const double P_q   = 50000.0;// Terminal position weight
   const double P_dq  = 300.0;// Terminal velocity weight
 
-  cs::MX E_q  = q_ref  - q0;// Position error at the current time step (t=0)
-  cs::MX E_dq = dq_ref - dq0;// Velocity error at the current time step (t=0)
+  cs::MX E_q  = q_ref  - q0;
+  cs::MX E_dq = dq_ref - dq0;
 
   // Friction-aware model: per-joint alpha_j = mu_viscous / M_jj
-  // M_flat is column-major 7×7; diagonal element j is at index j*7+j = j*8
   const double mu_v = 16.0;
   cs::MX M_diag = cs::MX::vertcat({
     M_flat(0),  M_flat(8),  M_flat(16), M_flat(24),
     M_flat(32), M_flat(40), M_flat(48)
   });
-  cs::MX alpha_j = mu_v / M_diag;  // 7×1, per-joint decay rate
-  cs::MX beta_j  = 1.0 / alpha_j;  // 7×1, per-joint time constant
+  cs::MX alpha_j = mu_v / M_diag;
+  cs::MX beta_j  = 1.0 / alpha_j;
 
-  // Accumulate cost over the prediction horizon
   cs::MX cost = cs::MX(0.0);
   for (int k = 1; k <= N; ++k) {
     const double t  = k * dt;
@@ -77,16 +76,22 @@ cs::MX v = cs::MX::sym("v", 7);// each v is the virtual acceleration for one joi
     cs::MX e_q  = a_k - g_q_j  * v;
     cs::MX e_dq = b_k - g_dq_j * v;
 
-    const double wq  = (k == N) ? (q_w + P_q)   : q_w;// the position error weight at the k-th step is wq, which is equal to q_w for all steps except the terminal step (k=N), where it is increased by adding P_q. This means that we place extra emphasis on minimizing the position error at the final step of the prediction horizon, which encourages the solver to find a trajectory that ends close to the reference position.
+    const double wq  = (k == N) ? (q_w + P_q)   : q_w;
     const double wdq = (k == N) ? (dq_w + P_dq) : dq_w;
 
     cost = cost + wq  * cs::MX::dot(e_q,  e_q)
-                + wdq * cs::MX::dot(e_dq, e_dq);// so this penalizes all seven joint errors together at each prediction step and add it to the cost i have to have all 15 future steps
+                + wdq * cs::MX::dot(e_dq, e_dq);
   }
 
   // Control rate penalty
   cs::MX dv = v - v_prev;
-  cost = cost + u_w * cs::MX::dot(dv, dv);// this adds a penalty to the cost function that discourages large changes in the virtual acceleration v from one time step to the next. By minimizing this term, we encourage smoother control inputs, which can lead to more stable and realistic robot motion.
+  cost = cost + cs::MX::dot(dv, cs::MX::times(u_w, dv));// dv^T diag(u_w) dv — per-joint penalty, keeps H PD
+
+  // Absolute magnitude penalty — pulls v toward zero when tracking error is small,
+  // preventing the rate-change term from sustaining non-zero v near waypoints.
+  const cs::MX v_mag_w = cs::MX::vertcat({0.5, 0.5, 0.5, 0.5, 0.3, 0.3, 0.3});
+  cost = cost + cs::MX::dot(v, cs::MX::times(v_mag_w, v));
+
 
   // Hard torque constraint: tau_min ≤ M·v + C + tau_fric ≤ tau_max
   cs::MX tau_cons = cs::MX::mtimes(M, v) + C_vec + tau_fric;

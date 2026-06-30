@@ -24,4 +24,4 @@ int casadi_qp_coupled_solve(  // Solves the QP problem with the given parameters
 }
 #endif
 
-#endif  
+#endif

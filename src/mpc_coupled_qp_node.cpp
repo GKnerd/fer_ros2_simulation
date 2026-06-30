@@ -40,7 +40,7 @@ public:
       "fer_joint1", "fer_joint2", "fer_joint3", "fer_joint4",
       "fer_joint5", "fer_joint6", "fer_joint7"
     };
-    waypoints_ = WAYPOINT_SET_1;  // change to SET_2 / SET_3 / SET_4 to switch sets
+    waypoints_ = WAYPOINT_SET_4;  // change to SET_2 / SET_3 / SET_4 to switch sets
 
 
 
@@ -68,7 +68,7 @@ public:
       "/robot_description", qos,
       std::bind(&MPCCoupledQPNode::robotDescriptionCallback, this, std::placeholders::_1));
 
-    this->declare_parameter<double>("trajectory_duration", 5.0);
+    this->declare_parameter<double>("trajectory_duration", 7.0);
     traj_duration_ = this->get_parameter("trajectory_duration").as_double();
 
     this->declare_parameter<std::string>("mpc_mode", "qp_coupled");
@@ -329,17 +329,19 @@ private:
       traj_gen_.init(q, q_des_, traj_duration_);
     }
     double t = t_now - start_time_;
-    auto ref = traj_gen_.eval(t);
 
     if (t >= traj_duration_ && current_waypoint_ + 1 < waypoints_.size()) {
       current_waypoint_++;
       q_des_ = waypoints_[current_waypoint_];
       traj_gen_.init(q, q_des_, traj_duration_);
       start_time_ = t_now;
+      t = 0.0;
       std::fill(error_integral_.begin(), error_integral_.end(), 0.0);
       RCLCPP_INFO(this->get_logger(),
         "Switching to waypoint %zu", current_waypoint_);
     }
+
+    auto ref = traj_gen_.eval(t);
 
   
     for (size_t i = 0; i < 7; ++i) {
@@ -396,8 +398,8 @@ private:
 
       if (rc == 0) {
         for (int i = 0; i < 7; ++i) {
-          v[i]        = v_out[i];
-          v_prev_[i]  = v_out[i];
+          v[i]         = v_out[i];
+          v_prev_[i]   = v_out[i];
           best_cost[i] = qp_cost_value;
         }
       } else {
@@ -435,7 +437,7 @@ private:
       }
     }
 
-    // ── Feedback-linearisation torque conversion (identical to original) ──────
+    // ── Feedback-linearisation torque conversion ──────────────────────────────
     for (size_t i = 0; i < 7; ++i) {
       double mv = 0.0;
       for (size_t j = 0; j < 7; ++j) {
@@ -502,7 +504,7 @@ private:
   std::vector<double> error_integral_ = std::vector<double>(7, 0.0);
   // Option C: small integral gain with QP-aware bounds shifting. Overcomes gravity model
   // mismatch and static friction residuals without MPC–integral fighting.
-  std::vector<double> ki_{2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0};
+  std::vector<double> ki_{4.0, 4.0, 4.0, 4.0, 3.0, 3.0, 3.0};
 
   std::vector<std::vector<double>> waypoints_;
   size_t current_waypoint_{0};

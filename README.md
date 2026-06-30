@@ -21,19 +21,19 @@ Ensure the following are installed on your host machine:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/GKnerd/fer_ros2_simulation.git
-cd fer_ros2_simulation
+git clone https://github.com/GKnerd/fer_ros2_simulation.git fer_ros2_mjc_docker
+cd fer_ros2_mjc_docker
 ```
 
 2. Create the source directory and import dependencies:
 ```bash
 mkdir -p ros2_ws/src
-vcs import ros2_ws/src < fer_ros2_mujoco.repos
+vcs import ros2_ws/src < fer_ros2_mjc.repos
 ```
 
 3. Build the Docker image:
 ```bash
-./.docker/build_image.sh
+./docker/build_image.sh
 ```
 This builds the image, compiles the full ROS 2 workspace inside the container, and copies the built workspace back to `ros2_ws/` on your host.
 
@@ -50,7 +50,7 @@ sudo sysctl -w net.core.rmem_max=2147483647
 
 1. Launch the container:
 ```bash
-./.docker/run_container.sh
+./docker/run_container.sh
 ```
 
 2. Inside the container, run the main launch file:
@@ -68,8 +68,8 @@ ros2 launch franka_mujoco_sim_bringup fer_mujoco_moveit.launch.py
 ## Repository Structure
 
 ```
-fer_ros2_simulation/
-├── .docker/
+fer_ros2_mjc_docker/
+├── docker/
 │   ├── Dockerfile              # Image definition (ROS 2 Jazzy + MoveIt + CycloneDDS)
 │   ├── build_image.sh          # Builds the Docker image and extracts the built workspace
 │   └── run_container.sh        # Runs the container with GPU/display/volume mounts
@@ -77,19 +77,23 @@ fer_ros2_simulation/
 │   └── cyclone_dds.xml         # CycloneDDS middleware profile
 ├── ros2_ws/
 │   └── src/                    # Populated by vcs import (see Installation)
-├── fer_ros2_mujoco.repos       # VCS dependency manifest
-└── DDS_Profiles.md             # Reference guide for CycloneDDS configuration and some additional experimental tips which are not on main 
+├── fer_ros2_mjc.repos          # VCS dependency manifest
+├── DDS_Profiles.md             # Reference guide for CycloneDDS configuration and some additional experimental tips which are not on main
+├── THIRDPARTY.md               # Third-party attribution notes
+└── LICENSE
 ```
 
-### Workspace packages (imported via `fer_ros2_mujoco.repos`)
+### Workspace packages (imported via `fer_ros2_mjc.repos`)
 | Package | Description |
 |---|---|
 | `franka_description` | Official Franka Robotics URDF and meshes |
 | `franka_mujoco_sim_bringup` | Launch files, URDF wrapper, and controller configs |
 | `mujoco_ros2_control` | MuJoCo hardware interface for `ros2_control` |
 | `mujoco_vendor` | CMake vendor package that integrates the MuJoCo binary |
-| `cartesian_controllers` | Cartesian-space controllers for the arm |
-| `panda_moveit_config` | MoveIt configuration for the Panda robot |
+| `fer_moveit_config` | MoveIt configuration for the FER robot |
+| `fer_skills` | Reusable manipulation skills built on MoveIt |
+| `speed_and_separation_monitoring` | ISO/TS 15066 speed-and-separation monitoring node |
+| `BehaviorTree.ROS2` | BehaviorTree.CPP bindings for ROS 2 |
 
 ---
 

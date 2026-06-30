@@ -22,7 +22,8 @@ YELLOW_BOLD="\033[1;33m"
 GREEN_BOLD="\033[1;32m"
 RESET="\033[0m"
 
-PACKAGE_NAME="fer_ros2_mujoco_docker"
+PACKAGE_NAME="fer_ros2_mjc_docker"
+# Must match the ARG USER default in docker/Dockerfile
 CONTAINER_USER="fer_ros2_sim"
 
 # Set Package root

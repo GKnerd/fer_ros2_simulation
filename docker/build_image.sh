@@ -23,7 +23,8 @@ YELLOW_BOLD="\033[1;33m"
 GREEN_BOLD="\033[1;32m"
 RESET="\033[0m"
 
-PACKAGE_NAME="fer_ros2_mujoco_docker"
+PACKAGE_NAME="fer_ros2_mjc_docker"
+# Must match the ARG USER default in docker/Dockerfile
 CONTAINER_USER="fer_ros2_sim"
 
 # Set Package root
@@ -56,9 +57,8 @@ done
 docker build \
     --build-arg UID="$uid" \
     --build-arg GID="$gid" \
-    --build-arg USER="$CONTAINER_USER" \
     --network=host \
-    -t $PACKAGE_NAME/ros:jazzy_moveit . -f $PACKAGE_ROOT/.docker/Dockerfile \
+    -t $PACKAGE_NAME/ros:jazzy_moveit . -f $PACKAGE_ROOT/docker/Dockerfile \
     && docker create --name temp-container $PACKAGE_NAME/ros:jazzy_moveit \
     && docker cp temp-container:/home/${CONTAINER_USER}/ros2_ws/. $PACKAGE_ROOT/ros2_ws/. \
     && docker rm temp-container

@@ -3,7 +3,7 @@ repositories:
     type: git
     url: https://github.com/frankarobotics/franka_description.git
     version: 72baf5bf4e88eaec27f0eb61be1b20a001abf2ab
-  franka_mujoco_sim_bringup:
+  fer_ros2_mjc_bringup:
     type: git
     url: https://github.com/GKnerd/mujoco_sim_bringup.git
     version: main
@@ -15,13 +15,9 @@ repositories:
     type: git
     url: https://github.com/pal-robotics/mujoco_vendor.git
     version: 26187d69dd239adc45c121af780d57590d189686
-  cartesian_controllers:
+  fer_moveit_config:
     type: git
-    url: https://github.com/fzi-forschungszentrum-informatik/cartesian_controllers.git
-    version: ros2
-  panda_moveit_config:
-    type: git
-    url: https://github.com/GKnerd/panda_moveit_config.git
+    url: https://github.com/GKnerd/fer_moveit_config.git
     version: jazzy-devel
   fer_skills:
     type: git

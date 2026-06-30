@@ -1,10 +1,34 @@
-# ROS 2 MuJoCo Simulation for Franka Robotics Panda (FER)
+# fer_ros2_mjc_docker — ROS 2 MuJoCo Simulation for the Franka Emika Robot (FER)
 
-This repository provides a high-fidelity physics simulation for the FER robot using **MuJoCo** and **ROS 2 Jazzy**. It uses the `mujoco_ros2_control` framework and ships a fully Dockerized workflow with CycloneDDS for low-latency inter-process communication.
+A **meta-repository** that assembles a complete ROS 2 Jazzy simulation
+environment for the Franka Emika Robot (FER) in MuJoCo. This repository
+does not contain ROS 2 source packages itself — it bundles the glue
+needed to stand them up reproducibly:
+
+* A **Docker image** preloaded with ROS 2 Jazzy, MoveIt, MuJoCo, and
+  CycloneDDS, plus helper scripts to build and run it.
+* A **vcstool manifest** (`fer_ros2_mjc.repos`) that pins exact upstream
+  and first-party package commits.
+* A **CycloneDDS profile** (`env/cyclone_dds.xml`) tuned for trajectory
+  traffic to avoid dropped packets on large MoveIt plans.
+* Top-level **third-party attribution** for all bundled components.
+
+The actual robotics code lives in the packages it imports. First-party
+packages each live in their own GitHub repo and are version-pinned in
+`fer_ros2_mjc.repos` alongside upstream third-party packages — see
+[Workspace packages](#workspace-packages-imported-via-fer_ros2_mjcrepos)
+below.
 
 ## Key Features
-* **Modular URDF Wrapper**: Uses a top-level Xacro wrapper to inject MuJoCo physics without modifying upstream Franka packages.
-* **Dockerized Workflow**: Consistent development environment with all dependencies (MuJoCo, MoveIt, ros2_control, CycloneDDS) pre-configured.
+* **Modular URDF Wrapper**: A top-level Xacro wrapper injects MuJoCo
+  physics into the upstream Franka URDF without modifying upstream
+  Franka packages.
+* **Dockerized Workflow**: Consistent development environment with all
+  dependencies (MuJoCo, MoveIt, ros2_control, CycloneDDS) preinstalled.
+* **Pinned, reproducible workspace**: All third-party sources and
+  first-party packages are pinned to specific commits in
+  `fer_ros2_mjc.repos`, so a clean re-import always reconstructs the
+  same workspace.
 
 ---
 
@@ -21,7 +45,7 @@ Ensure the following are installed on your host machine:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/GKnerd/fer_ros2_simulation.git fer_ros2_mjc_docker
+git clone https://github.com/GKnerd/fer_ros2_mjc_docker.git
 cd fer_ros2_mjc_docker
 ```
 
@@ -55,14 +79,14 @@ sudo sysctl -w net.core.rmem_max=2147483647
 
 2. Inside the container, run the main launch file:
 ```bash
-ros2 launch franka_mujoco_sim_bringup fer_mujoco_ros2_control.launch.py
+ros2 launch fer_ros2_mjc_bringup fer_mujoco_ros2_control.launch.py
 ```
 This opens the MuJoCo simulator and activates the effort controller for the arm and an effort controller for the hand.
 
 If you wish to use the Mujoco simulator with MoveIt and an activated effort controller for the hand and arm you can use this launch file instead.
 
 ```bash
-ros2 launch franka_mujoco_sim_bringup fer_mujoco_moveit.launch.py
+ros2 launch fer_ros2_mjc_bringup fer_mujoco_moveit.launch.py
 ```
 
 ## Repository Structure
@@ -84,16 +108,30 @@ fer_ros2_mjc_docker/
 ```
 
 ### Workspace packages (imported via `fer_ros2_mjc.repos`)
+
+**First-party packages** (developed for this project, hosted under
+[github.com/GKnerd](https://github.com/GKnerd)):
+
 | Package | Description |
 |---|---|
-| `franka_description` | Official Franka Robotics URDF and meshes |
-| `franka_mujoco_sim_bringup` | Launch files, URDF wrapper, and controller configs |
-| `mujoco_ros2_control` | MuJoCo hardware interface for `ros2_control` |
-| `mujoco_vendor` | CMake vendor package that integrates the MuJoCo binary |
-| `fer_moveit_config` | MoveIt configuration for the FER robot |
-| `fer_skills` | Reusable manipulation skills built on MoveIt |
-| `speed_and_separation_monitoring` | ISO/TS 15066 speed-and-separation monitoring node |
-| `BehaviorTree.ROS2` | BehaviorTree.CPP bindings for ROS 2 |
+| [`fer_ros2_mjc_bringup`](https://github.com/GKnerd/fer_ros2_mjc_bringup) | Project-glue bringup: Xacro wrapper, controller configs, MuJoCo scenes, and the top-level launch files |
+| [`fer_moveit_config`](https://github.com/GKnerd/fer_moveit_config) | MoveIt configuration for the FER |
+| [`fer_skills`](https://github.com/GKnerd/fer_skills) | Reusable manipulation skills built on MoveIt |
+
+**Upstream third-party packages** (pinned to specific commits, see
+[`THIRDPARTY.md`](THIRDPARTY.md) for full attribution):
+
+| Package | Source | Purpose |
+|---|---|---|
+| `franka_description` | [frankarobotics](https://github.com/frankarobotics/franka_description) | Official Franka URDF and meshes |
+| `mujoco_ros2_control` | [ros-controls](https://github.com/ros-controls/mujoco_ros2_control) | MuJoCo hardware interface for `ros2_control` |
+| `mujoco_vendor` | [pal-robotics](https://github.com/pal-robotics/mujoco_vendor) | CMake vendor package that integrates the MuJoCo binary |
+| `BehaviorTree.ROS2` | [BehaviorTree](https://github.com/BehaviorTree/BehaviorTree.ROS2) | ROS 2 bindings for BehaviorTree.CPP (pinned past 0.3.0 for a Jazzy crash fix) |
+
+**Apt-provided dependencies** (installed by the Dockerfile, not via
+`.repos`): MoveIt, `ros2_control`, `ros2_controllers`, CycloneDDS,
+RViz2, MoveIt Task Constructor, **BehaviorTree.CPP**
+(`ros-jazzy-behaviortree-cpp`).
 
 ---
 
